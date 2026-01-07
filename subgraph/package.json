@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "license": "Apache-2.0",
   "scripts": {
-    "codegen": "graph codegen",
+    "codegen": "npx -y @graphprotocol/graph-cli@0.68.5 codegen",
     "build": "graph build",
     "deploy": "graph deploy --node https://api.studio.thegraph.com/deploy/",
     "test": "matchstick-as -r"

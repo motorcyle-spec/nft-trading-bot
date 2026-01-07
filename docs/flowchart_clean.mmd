@@ -1,0 +1,113 @@
+flowchart TB
+ subgraph USER["👤 User Layer"]
+        U1["Primary User"]
+        U2["Secondary Owner"]
+        UI["Web Interface<br>Viem + Wagmi + RainbowKit"]
+  end
+ subgraph FACTORY["🏭 Factory Layer - CREATE2 Deployment"]
+        Factory["Bot Factory Contract<br>ERC721A Integration<br>Secure Salt Generation"]
+        BotImpl["Bot Implementation<br>Master Contract"]
+        Registry["Bot Registry<br>TokenID → Bot Mapping"]
+  end
+ subgraph BOT["🤖 Bot Instance Layer"]
+        BotProxy["Bot Proxy<br>Minimal Clone EIP-1167<br>~10x Gas Savings"]
+        BotLogic["Trading Logic<br>• Strategy Engine<br>• Risk Management<br>• Access Control"]
+        BotState["Bot State<br>• Performance Metrics<br>• Trade History<br>• Configuration"]
+  end
+ subgraph NFT["🎨 Ownership Layer - ERC721A"]
+        NFTContract["Bot NFT Contract<br>Batch Optimized<br>Metadata Handler"]
+        NFTToken["NFT Token #N<br>Represents Bot Ownership"]
+        Metadata["Metadata<br>On-chain: Config + Stats<br>IPFS: Detailed History"]
+  end
+ subgraph WALLET["💰 Wallet Layer"]
+        SCWallet["Smart Contract Wallet<br>Gnosis Safe Pattern<br>or ERC-4337"]
+        Funds["Trading Funds<br>ETH + ERC20 Tokens"]
+        WalletGuards["Security<br>• Reentrancy Guard<br>• Rate Limiting<br>• Emergency Pause"]
+  end
+ subgraph TRADE["📈 Trading Layer - Sepolia Testnet"]
+        UniV3["Uniswap V3<br>Live Pools<br>Real-time Swaps"]
+        Strategy["Trading Strategies<br>• DCA<br>• Arbitrage<br>• Market Making"]
+        Oracle["Price Oracles<br>Chainlink/Uniswap TWAP"]
+  end
+ subgraph BACKEND["⚙️ Backend Services"]
+        Indexer["The Graph<br>Historical Data"]
+        Monitor["Quicknode Streams<br>Real-time Events"]
+        Cache["Redis Cache<br>Bot States"]
+  end
+ subgraph MARKET["🏪 Secondary Market"]
+        OpenSea["OpenSea/Custom<br>Marketplace"]
+        Transfer["NFT Transfer<br>Bot + Wallet + History"]
+  end
+    U1 -- "1. Deploy Bot" --> UI
+    UI -- "2. Create Request" --> Factory
+    Factory -- "3a. Clone via CREATE2" --> BotProxy
+    Factory -- "3b. Mint Token" --> NFTContract
+    Factory -- "3c. Deploy Wallet" --> SCWallet
+    Factory -- "3d. Register" --> Registry
+    BotProxy -. References .-> BotImpl
+    Factory -- "4. Initialize" --> BotLogic
+    BotProxy -- Delegates to --> BotLogic
+    BotLogic -- Manages --> BotState
+    NFTContract -- Creates --> NFTToken
+    U1 -- Owns --> NFTToken
+    NFTToken -- Controls --> BotProxy
+    BotProxy -- Owns --> SCWallet
+    SCWallet -- Holds --> Funds
+    U1 -- "5. Send Commands" --> NFTToken
+    NFTToken -- "6. Validates Owner" --> BotLogic
+    BotLogic -- "7. Executes Strategy" --> Strategy
+    Strategy -- "8. Generates Signals" --> BotLogic
+    BotLogic -- "9. Execute Trade" --> SCWallet
+    SCWallet -- "10. Swap" --> UniV3
+    UniV3 -- "11. Results" --> Funds
+    Strategy -. Uses .-> Oracle
+    BotState -. Updates .-> Metadata
+    Funds -. Balance Data .-> Metadata
+    Metadata -. Displays .-> NFTToken
+    BotLogic -. Events .-> Monitor
+    Monitor -. "Real-time Updates" .-> Cache
+    UniV3 -. Historical Data .-> Indexer
+    Indexer -. Queries .-> UI
+    Cache -. Fast Access .-> UI
+    WalletGuards -- Protects --> SCWallet
+    BotLogic -. Emergency Controls .-> WalletGuards
+    U1 -- "12. List for Sale" --> OpenSea
+    NFTToken -. Metadata Display .-> OpenSea
+    OpenSea -- "13. Transfer" --> U2
+    U2 -- New Owner --> NFTToken
+    Transfer -. Includes .-> BotState & Funds
+    n1["Rounded"]
+
+    n1@{ shape: rounded}
+     U1:::userClass
+     U2:::userClass
+     UI:::userClass
+     Factory:::factoryClass
+     BotImpl:::factoryClass
+     Registry:::factoryClass
+     BotProxy:::botClass
+     BotLogic:::botClass
+     BotState:::botClass
+     NFTContract:::nftClass
+     NFTToken:::nftClass
+     Metadata:::nftClass
+     SCWallet:::walletClass
+     Funds:::walletClass
+     WalletGuards:::walletClass
+     UniV3:::tradeClass
+     Strategy:::tradeClass
+     Oracle:::tradeClass
+     Indexer:::backendClass
+     Monitor:::backendClass
+     Cache:::backendClass
+     OpenSea:::marketClass
+     Transfer:::marketClass
+    classDef userClass fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    classDef factoryClass fill:#E94B3C,stroke:#A73529,stroke-width:3px,color:#fff
+    classDef botClass fill:#50C878,stroke:#2E7D4E,stroke-width:3px,color:#fff
+    classDef nftClass fill:#F39C12,stroke:#BA7508,stroke-width:3px,color:#fff
+    classDef walletClass fill:#9B59B6,stroke:#6C3483,stroke-width:3px,color:#fff
+    classDef tradeClass fill:#27AE60,stroke:#1E8449,stroke-width:3px,color:#fff
+    classDef marketClass fill:#E67E22,stroke:#A04000,stroke-width:3px,color:#fff
+    classDef backendClass fill:#34495E,stroke:#1C2833,stroke-width:3px,color:#fff
+    classDef dataClass fill:#95A5A6,stroke:#566573,stroke-width:2px

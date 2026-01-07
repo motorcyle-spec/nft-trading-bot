@@ -1,0 +1,44 @@
+specVersion: 0.0.4
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: BotFactory
+    network: sepolia
+    source:
+      address: "0x0000000000000000000000000000000000000000"
+      abi: BotFactory
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Bot
+      abis:
+        - name: BotFactory
+          file: ./abis/BotFactory.json
+      eventHandlers:
+        - event: BotDeployed(indexed address,indexed address,indexed uint256,bytes32)
+          handler: handleBotDeployed
+      file: ./src/bot-factory.ts
+  - kind: ethereum
+    name: TradingBot
+    network: sepolia
+    source:
+      address: "0x0000000000000000000000000000000000000000"
+      abi: TradingBot
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Trade
+      abis:
+        - name: TradingBot
+          file: ./abis/TradingBot.json
+      eventHandlers:
+        - event: TradeExecuted(indexed address,indexed address,uint256,uint256,int256)
+          handler: handleTradeExecuted
+      file: ./src/trading-bot.ts

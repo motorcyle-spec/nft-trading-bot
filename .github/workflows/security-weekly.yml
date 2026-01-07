@@ -1,0 +1,61 @@
+name: Weekly Security Scan
+
+on:
+  schedule:
+    - cron: '0 4 * * 1' # weekly on Monday at 04:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  slither-weekly:
+    name: "Weekly Slither Scan & Triage"
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SLITHER_ANNOTATE: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Slither
+        run: pip install slither-analyzer
+
+      - name: Run Slither
+        run: |
+          cd contracts
+          slither . --config-file slither.config.json --json /tmp/slither-output.json || true
+        working-directory: ./contracts
+
+      - name: Upload slither report
+        uses: actions/upload-artifact@v4
+        with:
+          name: slither-weekly-report
+          path: /tmp/slither-output.json
+
+      - name: Create or update weekly Slither issue
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '/tmp/slither-output.json';
+            if (!fs.existsSync(path)) return;
+            const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const detectors = data.results && data.results.detectors ? data.results.detectors : [];
+            if (detectors.length === 0) return;
+            const summary = detectors.slice(0, 25).map((d,i) => `${i+1}. ${d.title || d.detector || (d.elements && d.elements[0] && d.elements[0].name)}`).join('\n');
+            const title = `Weekly Slither findings: ${new Date().toISOString().split('T')[0]}`;
+            const body = `Automated weekly Slither scan detected ${detectors.length} issues.\n\n**Top findings (truncated):**\n\n${summary}\n\nArtifact: https://github.com/${context.repo.owner}/${context.repo.repo}/suites/${context.runId}/artifacts`;
+
+            const issues = await github.rest.issues.listForRepo({ owner: context.repo.owner, repo: context.repo.repo, labels: 'security/failing-slither', state: 'open' });
+            const existing = issues.data.find(i => i.title && i.title.includes('Weekly Slither findings'));
+            if (existing) {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, body }).catch(()=>{});
+            } else {
+              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body, labels: ['security/failing-slither'] }).catch(()=>{});
+            }

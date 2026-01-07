@@ -1,0 +1,5 @@
+@openzeppelin/=lib/openzeppelin-contracts/
+@erc721a/=lib/erc721a/contracts/
+@gnosis-safe/=lib/gnosis-safe/
+@uniswap-v3/=lib/uniswap-v3-periphery/contracts/
+forge-std/=lib/forge-std/src/

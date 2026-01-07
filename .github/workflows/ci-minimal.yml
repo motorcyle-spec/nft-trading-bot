@@ -1,0 +1,220 @@
+name: CI - Minimal
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  forge-test:
+    name: "Contracts: Forge Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Enable Corepack (Yarn 3)
+        run: |
+          corepack enable
+          corepack prepare yarn@stable --activate
+
+      - name: Install Node dependencies
+        run: yarn install --immutable
+
+      - name: Install Foundry (foundryup)
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run Forge Tests
+        working-directory: ./contracts
+        run: forge test -v
+
+  workspace-tests:
+    name: "Workspace tests (frontend/backend - conditional)"
+    runs-on: ubuntu-latest
+    needs: forge-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@stable --activate
+
+      - name: Install Node dependencies
+        run: yarn install --immutable
+
+      - name: Run Frontend Tests (if present)
+        run: |
+          set -e
+          shopt -s globstar || true
+          if ls frontend/src/**/*.{test,spec}.{js,ts,jsx,tsx} 1> /dev/null 2>&1; then
+            echo "Running frontend tests"
+            yarn workspace nft-trading-bot-frontend test
+          else
+            echo "No frontend tests found; skipping"
+          fi
+
+      - name: Run Backend Tests (if present)
+        run: |
+          set -e
+          shopt -s globstar || true
+          if ls backend/**/*.{test,spec}.{js,ts} 1> /dev/null 2>&1; then
+            echo "Running backend tests"
+            yarn workspace nft-trading-bot-backend test
+          else
+            echo "No backend tests found; skipping"
+          fi
+
+  coverage:
+    name: "Contracts: Coverage"
+    runs-on: ubuntu-latest
+    needs: forge-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@stable --activate
+
+      - name: Install Node dependencies
+        run: yarn install --immutable
+
+      - name: Install Foundry (foundryup)
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Generate Coverage Report
+        working-directory: ./contracts
+        run: forge coverage --report lcov
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./contracts/coverage/lcov.info
+          flags: solidity
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: contracts-coverage
+          path: contracts/coverage/lcov.info
+
+  security:
+    name: "Security: Slither"
+    runs-on: ubuntu-latest
+    needs: forge-test
+    env:
+      SLITHER_FAIL_ON_FINDINGS: ${{ secrets.SLITHER_FAIL_ON_FINDINGS }}
+      SLITHER_ANNOTATE: ${{ secrets.SLITHER_ANNOTATE }}
+      SLITHER_AUTO_TRIAGE: ${{ secrets.SLITHER_AUTO_TRIAGE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Foundry (foundryup)
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Slither
+        run: pip install slither-analyzer
+
+      - name: Run Slither
+        working-directory: ./contracts
+        run: slither . --config-file slither.config.json --json /tmp/slither-output.json || true
+
+      - name: Upload slither report
+        uses: actions/upload-artifact@v4
+        with:
+          name: slither-report
+          path: /tmp/slither-output.json
+
+      - name: Fail on Slither findings (optional)
+        if: env.SLITHER_FAIL_ON_FINDINGS == 'true'
+        uses: actions/github-script@v8
+        env:
+          SLITHER_OUTPUT: /tmp/slither-output.json
+        with:
+          script: |
+            const fs = require('fs');
+            const path = process.env.SLITHER_OUTPUT;
+            if (!fs.existsSync(path)) {
+              return;
+            }
+            const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const detectors = data.results && data.results.detectors ? data.results.detectors : [];
+            if (detectors.length > 0) {
+              const preview = detectors.slice(0, 10).map(d => d.title || (d.elements && d.elements[0] && d.elements[0].name) || d.detector).join('\n');
+              throw new Error(`Slither found ${detectors.length} issue(s):\n${preview}`);
+            }
+
+      - name: Annotate PR with Slither findings (optional)
+        if: github.event_name == 'pull_request' && env.SLITHER_ANNOTATE == 'true'
+        uses: actions/github-script@v8
+        env:
+          SLITHER_OUTPUT: /tmp/slither-output.json
+        with:
+          script: |
+            const fs = require('fs');
+            const path = process.env.SLITHER_OUTPUT;
+            if (!fs.existsSync(path)) return;
+            const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const detectors = data.results && data.results.detectors ? data.results.detectors : [];
+            if (detectors.length === 0) return;
+            const preview = detectors.slice(0, 25).map((d, i) => `${i+1}. ${d.title || d.detector || (d.elements && d.elements[0] && d.elements[0].name)}`).join('\n');
+            const number = context.payload.pull_request.number;
+            const body = `:warning: Slither found ${detectors.length} potential issue(s) in this PR.\n\n\n**Top findings (truncated):**\n\n${preview}\n\nSee the full \'slither-report\' artifact for details.`;
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body });
+
+      - name: Auto-triage Slither findings (optional)
+        if: env.SLITHER_AUTO_TRIAGE == 'true'
+        uses: actions/github-script@v8
+        env:
+          SLITHER_OUTPUT: /tmp/slither-output.json
+        with:
+          script: |
+            const fs = require('fs');
+            const path = process.env.SLITHER_OUTPUT;
+            if (!fs.existsSync(path)) return;
+            const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const detectors = data.results && data.results.detectors ? data.results.detectors : [];
+            if (detectors.length === 0) return;
+            const summary = detectors.slice(0, 25).map((d, i) => `${i+1}. ${d.title || d.detector || (d.elements && d.elements[0] && d.elements[0].name)}`).join('\n');
+            const title = `Slither findings: ${new Date().toISOString().split('T')[0]}`;
+            const body = `Slither detected ${detectors.length} potential issues.\n\n**Top findings (truncated):**\n\n${summary}\n\nArtifact: https://github.com/${context.repo.owner}/${context.repo.repo}/suites/${context.runId}/artifacts`;
+
+            // For pull requests, add label to PR and post a comment
+            if (context.payload.pull_request) {
+              const prNumber = context.payload.pull_request.number;
+              await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber, labels: ['security/failing-slither'] }).catch(()=>{});
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber, body }).catch(()=>{});
+              return;
+            }
+
+            // For non-PR runs, create or append to an open issue with the label
+            const issues = await github.rest.issues.listForRepo({ owner: context.repo.owner, repo: context.repo.repo, labels: 'security/failing-slither', state: 'open' });
+            const existing = issues.data.find(i => i.title && i.title.includes('Slither findings'));
+            if (existing) {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, body }).catch(()=>{});
+            } else {
+              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body, labels: ['security/failing-slither'] }).catch(()=>{});
+            }

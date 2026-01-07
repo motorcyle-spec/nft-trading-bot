@@ -1,0 +1,50 @@
+name: Gas Report Comment
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  gas-report:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+    
+    - name: Generate Gas Report
+      run: |
+        cd contracts
+        forge test --gas-report > /tmp/gas-report.txt 2>&1 || true
+
+    - name: Upload full gas report as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gas-report
+        path: /tmp/gas-report.txt
+    
+    - name: Post Gas Report Comment
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const gasReport = fs.readFileSync('/tmp/gas-report.txt', 'utf8');
+          
+          const comment = `## ⛽ Gas Report
+
+          \`\`\`
+          ${gasReport.split('\n').slice(0, 50).join('\n')}
+          \`\`\`
+          
+          See full report with: \`forge test --gas-report\``;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });

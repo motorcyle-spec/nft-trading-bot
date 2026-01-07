@@ -1,0 +1,36 @@
+type Bot @entity {
+  id: ID!
+  address: String!
+  owner: String!
+  tokenId: BigInt!
+  name: String!
+  strategy: String!
+  status: String!
+  baseToken: String!
+  quoteToken: String!
+  tradeAmount: BigInt!
+  minProfitTarget: Int!
+  maxDrawdown: Int!
+  totalTrades: Int!
+  totalPnL: BigInt!
+  createdAt: BigInt!
+  updatedAt: BigInt!
+}
+
+type Trade @entity {
+  id: ID!
+  botAddress: String!
+  timestamp: BigInt!
+  tokenIn: String!
+  tokenOut: String!
+  amountIn: BigInt!
+  amountOut: BigInt!
+  pnl: BigInt!
+}
+
+type Owner @entity {
+  id: ID!
+  address: String!
+  botCount: Int!
+  totalPnL: BigInt!
+}

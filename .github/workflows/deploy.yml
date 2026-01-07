@@ -1,0 +1,123 @@
+name: Deploy
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy-contracts:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+    
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+    
+    - name: Install dependencies
+      run: yarn install
+    
+    - name: Deploy Smart Contracts to Sepolia
+      env:
+        PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+      run: |
+        cd contracts
+        forge script script/DeployBotFactory.s.sol:DeployBotFactory \
+          --rpc-url https://eth-sepolia.g.alchemy.com/v2/${{ secrets.ALCHEMY_API_KEY }} \
+          --broadcast \
+          --verify
+
+  deploy-subgraph:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+    
+    - name: Install dependencies
+      run: |
+        cd subgraph
+        npm install
+    
+    - name: Build Subgraph
+      run: |
+        cd subgraph
+        npm run codegen
+        npm run build
+    
+    - name: Deploy to The Graph
+      env:
+        GRAPH_DEPLOY_KEY: ${{ secrets.GRAPH_DEPLOY_KEY }}
+      run: |
+        cd subgraph
+        npm run deploy
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+    
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm install
+    
+    - name: Build Frontend
+      run: |
+        cd frontend
+        npm run build
+    
+    - name: Deploy to Vercel
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      run: |
+        cd frontend
+        npm i -g vercel
+        vercel deploy --prod --token $VERCEL_TOKEN
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+    
+    - name: Install dependencies
+      run: |
+        cd backend
+        npm install
+    
+    - name: Build Backend
+      run: |
+        cd backend
+        npm run build
+    
+    - name: Deploy to Production
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      run: |
+        npm i -g @railway/cli
+        railway up --detach

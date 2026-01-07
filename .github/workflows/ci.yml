@@ -1,0 +1,97 @@
+name: CI/CD Pipeline
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+    
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+    
+    - name: Install dependencies
+      run: yarn install
+    
+    - name: Run Smart Contract Tests
+      run: yarn test:contracts
+    
+    - name: Run Frontend Tests
+      run: yarn test:frontend
+    
+    - name: Lint Smart Contracts
+      run: yarn lint
+    
+    - name: Security Analysis with Slither
+      run: yarn slither 2>/dev/null || echo "⚠️ Slither warnings found"
+      continue-on-error: true
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+    
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+    
+    - name: Install dependencies
+      run: yarn install
+    
+    - name: Generate Coverage Report
+      run: |
+        cd contracts
+        forge coverage --report lcov
+    
+    - name: Upload to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./contracts/coverage/lcov.info
+        flags: solidity
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, coverage]
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+    
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+    
+    - name: Install dependencies
+      run: yarn install
+    
+    - name: Build Contracts
+      run: yarn build:contracts
+    
+    - name: Build Frontend
+      run: yarn build:frontend
+    
+    - name: Build Subgraph
+      run: yarn build:subgraph
+    
+    - name: Build Backend
+      run: cd backend && npm run build

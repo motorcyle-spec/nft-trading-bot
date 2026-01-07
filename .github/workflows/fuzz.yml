@@ -1,0 +1,71 @@
+name: Fuzz Tests
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 3 * * *' # daily at 03:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  pr-fuzz:
+    permissions:
+      issues: write
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      ANNOTATE_PR_ON_FUZZ_FAIL: ${{ secrets.PR_FUZZ_ANNOTATE }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - id: run-targeted-fuzz
+        name: Run targeted fuzz tests (PR)
+        continue-on-error: true
+        run: |
+          cd contracts
+          echo "Running targeted fuzz tests: TradingBotFuzz (64 runs)"
+          forge test --match-contract TradingBotFuzz --fuzz-runs 64 > /tmp/pr-fuzz-report.txt 2>&1
+
+      - name: Upload PR fuzz report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-fuzz-report
+          path: /tmp/pr-fuzz-report.txt
+
+      - name: Annotate PR on fuzz failure
+        if: ${{ steps.run-targeted-fuzz.outcome == 'failure' && env.ANNOTATE_PR_ON_FUZZ_FAIL == 'true' }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/suites/${context.runId}/artifacts`;
+            const number = context.payload.pull_request.number;
+            const body = `:warning: Foundry fuzz tests failed for this PR. See the fuzz report artifact: ${runUrl}\n\nArtifact name: pr-fuzz-report`;
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body });
+
+  nightly-fuzz:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run full fuzz test (nightly)
+        continue-on-error: true
+        run: |
+          cd contracts
+          echo "Running nightly fuzz tests: all fuzz tests (1024 runs each)"
+          # Use a higher fuzz-runs count for nightly runs
+          forge test --fuzz-runs 1024 > /tmp/nightly-fuzz-report.txt 2>&1 || true
+
+      - name: Upload nightly fuzz report
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-fuzz-report
+          path: /tmp/nightly-fuzz-report.txt
